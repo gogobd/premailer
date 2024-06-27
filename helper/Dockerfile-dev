@@ -1,0 +1,44 @@
+FROM debian:bookworm-slim
+
+# Install system dependencies
+RUN apt-get update \
+   && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+   curl \
+   wget \
+   git \
+   screen \
+   unzip \
+   vim \
+   procps \
+   locales \
+   ca-certificates clang curl git libjpeg-dev build-essential make libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev \
+   && apt-get clean
+
+
+# Locale quirks
+RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen \
+    && locale-gen en_US.UTF-8 \
+    && update-locale LANG=en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+RUN locale
+
+
+# Code server
+# https://github.com/coder/code-server/releases
+RUN mkdir -p ~/.local/lib ~/.local/bin
+RUN curl -sL https://github.com/cdr/code-server/releases/download/v4.90.3/code-server-4.90.3-linux-amd64.tar.gz | tar -C ~/.local/lib -xz
+RUN mv ~/.local/lib/code-server-4.90.3-linux-amd64 ~/.local/lib/code-server-4.90.3
+RUN ln -s ~/.local/lib/code-server-4.90.3/bin/code-server /usr/local/bin/code-server
+
+
+# Running / entry
+WORKDIR /app
+ENV SHELL=/bin/bash
+CMD ["/usr/local/bin/code-server", "--cert", "--bind-addr",  "0.0.0.0:8080", "/app"]
+
+# docker run --rm --privileged aptman/qus -s -- -p
+# docker build --build-arg PLATFORM=linux-amd64 -t codeserver-premailer -f Dockerfile-dev .
+# docker run --name codeserver-premailer -v ~/.ssh:/root/.ssh -v $(pwd):/app -p 8480:8080 -it -d codeserver-premailer
+# docker exec -it codeserver-premailer cat /root/.config/code-server/config.yaml
