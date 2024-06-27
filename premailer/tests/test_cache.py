@@ -1,4 +1,4 @@
-import imp
+import importlib.util
 import os
 import threading
 import time
@@ -23,7 +23,12 @@ class TestFunctionCache(unittest.TestCase):
         os.environ["PREMAILER_CACHE"] = "UNKNOWN"
 
         with self.assertRaises(Exception) as assert_context:
-            imp.load_source("cache.py", os.path.join("premailer", "cache.py"))
+            # imp.load_source("cache.py", os.path.join("premailer", "cache.py"))
+            spec = importlib.util.spec_from_file_location(
+                "cache.py", os.path.join("premailer", "cache.py")
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
 
         self.assertTrue(
             assert_context.exception.args[0].startswith(
@@ -36,9 +41,14 @@ class TestFunctionCache(unittest.TestCase):
         os.environ["PREMAILER_CACHE_TTL"] = "10"
         os.environ["PREMAILER_CACHE_MAXSIZE"] = "50"
 
-        cache_module = imp.load_source(
-            "cache.py", os.path.join("premailer", "cache.py")
+        # cache_module = imp.load_source(
+        #     "cache.py", os.path.join("premailer", "cache.py")
+        # )
+        spec = importlib.util.spec_from_file_location(
+            "cache", os.path.join("premailer", "cache.py")
         )
+        cache_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cache_module)
 
         self.assertEquals(type(cache_module.cache), cachetools.TTLCache)
         self.assertEquals(cache_module.cache.maxsize, 50)
@@ -83,9 +93,14 @@ class TestFunctionCache(unittest.TestCase):
                     time.sleep(0.01)
                     return (key, self.pop(key))
 
-        cache_module = imp.load_source(
-            "cache.py", os.path.join("premailer", "cache.py")
+        # cache_module = imp.load_source(
+        #     "cache.py", os.path.join("premailer", "cache.py")
+        # )
+        spec = importlib.util.spec_from_file_location(
+            "cache", os.path.join("premailer", "cache.py")
         )
+        cache_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cache_module)
 
         # Set module cache to point to overridden implementation.
         cache_module.cache = DelayedDeletionLRUCache(maxsize=1)

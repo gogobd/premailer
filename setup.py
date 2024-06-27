@@ -20,7 +20,7 @@ def find_version(*file_paths):
 
 install_requires = ["lxml", "cssselect", "cssutils", "requests", "cachetools"]
 
-tests_require = ["nose", "mock"]
+tests_require = ["mock>=4.0.0"]
 
 setup(
     name="premailer",
@@ -54,7 +54,6 @@ setup(
     ],
     packages=find_packages(),
     include_package_data=True,
-    test_suite="nose.collector",
     tests_require=tests_require,
     extras_require={
         "dev": ["tox", "twine", "therapist", "black", "flake8", "wheel"],

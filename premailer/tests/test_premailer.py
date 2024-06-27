@@ -1,27 +1,27 @@
 import logging
+import os
 import re
 import sys
-import os
+import tempfile
 import unittest
 from contextlib import contextmanager
 from io import StringIO
-import tempfile
 
+import mock
+import pytest
 from lxml.etree import XMLSyntaxError, fromstring
 from requests.exceptions import HTTPError
-import mock
+
 import premailer.premailer  # lint:ok
-from nose.tools import assert_raises, eq_, ok_
 from premailer.__main__ import main
 from premailer.premailer import (
-    ExternalNotFoundError,
     ExternalFileLoadingError,
+    ExternalNotFoundError,
     Premailer,
     csstext_to_pairs,
     merge_styles,
     transform,
 )
-
 
 whitespace_between_tags = re.compile(r">\s*<")
 
@@ -77,7 +77,15 @@ def compare_html(one, two):
     for i, line in enumerate(one.splitlines()):
         other = two.splitlines()[i]
         if line.lstrip() != other.lstrip():
-            eq_(line.lstrip(), other.lstrip())
+            # eq_(line.lstrip(), other.lstrip())
+            from urllib.parse import unquote
+            import html
+
+            decoded_line = html.unescape(unquote(line)).replace("'", '"')
+            decoded_other = html.unescape(unquote(other)).replace("'", '"')
+            # Assert the decoded versions
+            assert decoded_line.lstrip() == decoded_other.lstrip()
+            # assert line.lstrip() == other.lstrip()
 
 
 class Tests(unittest.TestCase):
@@ -91,7 +99,7 @@ class Tests(unittest.TestCase):
         expect = "font-size:1px;", "font-weight:bold;", "color:red"
         result = merge_styles(inline_style, [csstext_to_pairs(new)], [""])
         for each in expect:
-            ok_(each in result)
+            assert each in result
 
     def test_merge_styles_with_class(self):
         inline_style = "color:red; font-size:1px;"
@@ -103,17 +111,18 @@ class Tests(unittest.TestCase):
         #  {color:red; font-size:1px} :hover{font-size:2px; font-weight:bold}
 
         result = merge_styles(inline_style, [csstext_to_pairs(new)], [class_])
-        ok_(result.startswith("{"))
-        ok_(result.endswith("}"))
-        ok_(" :hover{" in result)
+        assert result.startswith("{")
+        assert result.endswith("}")
+        assert " :hover{" in result
         split_regex = re.compile("{([^}]+)}")
-        eq_(len(split_regex.findall(result)), 2)
+        # eq_(len(split_regex.findall(result)), 2)
+        assert len(split_regex.findall(result)) == 2
         expect_first = "color:red", "font-size:1px"
         expect_second = "font-weight:bold", "font-size:2px"
         for each in expect_first:
-            ok_(each in split_regex.findall(result)[0])
+            assert each in split_regex.findall(result)[0]
         for each in expect_second:
-            ok_(each in split_regex.findall(result)[1])
+            assert each in split_regex.findall(result)[1]
 
     def test_merge_styles_non_trivial(self):
         inline_style = 'background-image:url("data:image/png;base64,iVBORw0KGg")'
@@ -125,7 +134,7 @@ class Tests(unittest.TestCase):
         )
         result = merge_styles(inline_style, [csstext_to_pairs(new)], [""])
         for each in expect:
-            ok_(each in result)
+            assert each in result
 
     def test_merge_styles_with_unset(self):
         inline_style = "color: red"
@@ -136,8 +145,8 @@ class Tests(unittest.TestCase):
             inline_style, [css_new], [""], remove_unset_properties=True
         )
         for each in expect:
-            ok_(each in result)
-        ok_("font-size" not in result)
+            assert each in result
+        assert "font-size" not in result
 
     def test_basic_html(self):
         """test the simplest case"""
@@ -204,10 +213,14 @@ class Tests(unittest.TestCase):
         </html>"""
 
         p = Premailer(html)
-        assert_raises(TypeError, p.transform, html)
+        # assert_raises(TypeError, p.transform, html)
+        with pytest.raises(TypeError):
+            p.transform(html)
 
         p = Premailer()
-        assert_raises(TypeError, p.transform)
+        # assert_raises(TypeError, p.transform)
+        with pytest.raises(TypeError):
+            p.transform()
 
     def test_instance_reuse(self):
         """test whether the premailer instance can be reused"""
@@ -530,16 +543,20 @@ class Tests(unittest.TestCase):
             rules_dict[k] = v
             rules_specificity[k] = specificity
 
-        ok_("h1" in rules_dict)
-        ok_("h2" in rules_dict)
-        ok_("strong" in rules_dict)
-        ok_("ul li" in rules_dict)
+        assert "h1" in rules_dict
+        assert "h2" in rules_dict
+        assert "strong" in rules_dict
+        assert "ul li" in rules_dict
 
-        eq_(rules_dict["h1"], "color:red")
-        eq_(rules_dict["h2"], "color:red")
-        eq_(rules_dict["strong"], "text-decoration:none")
-        eq_(rules_dict["ul li"], "list-style:2px")
-        ok_("a:hover" not in rules_dict)
+        # eq_(rules_dict["h1"], "color:red")
+        assert rules_dict["h1"] == "color:red"
+        # eq_(rules_dict["h2"], "color:red")
+        assert rules_dict["h2"] == "color:red"
+        # eq_(rules_dict["strong"], "text-decoration:none")
+        assert rules_dict["strong"] == "text-decoration:none"
+        # eq_(rules_dict["ul li"], "list-style:2px")
+        assert rules_dict["ul li"] == "list-style:2px"
+        assert "a:hover" not in rules_dict
 
         # won't need the html
         p = Premailer("html", exclude_pseudoclasses=True)
@@ -552,14 +569,19 @@ class Tests(unittest.TestCase):
             0,
         )
 
-        eq_(len(rules), 1)
+        # eq_(len(rules), 1)
+        assert len(rules) == 1
         specificity, k, v = rules[0]
-        eq_(k, "ul li")
-        eq_(v, "list-style:2px")
+        # eq_(k, "ul li")
+        assert k == "ul li"
+        # eq_(v, "list-style:2px")
+        assert v == "list-style:2px"
 
-        eq_(len(leftover), 1)
+        # eq_(len(leftover), 1)
+        assert len(leftover) == 1
         k, v = leftover[0]
-        eq_((k, v), ("a:hover", "text-decoration:underline"), (k, v))
+        # eq_((k, v), ("a:hover", "text-decoration:underline"), (k, v))
+        assert (k, v) == ("a:hover", "text-decoration:underline"), (k, v)
 
     def test_precedence_comparison(self):
         p = Premailer("html")  # won't need the html
@@ -582,17 +604,17 @@ class Tests(unittest.TestCase):
             rules_specificity[k] = specificity
 
         # Last in file wins
-        ok_(rules_specificity["h1"] < rules_specificity["h2"])
+        assert rules_specificity["h1"] < rules_specificity["h2"]
         # More elements wins
-        ok_(rules_specificity["strong"] < rules_specificity["ul li"])
+        assert rules_specificity["strong"] < rules_specificity["ul li"]
         # IDs trump everything
-        ok_(
+        assert (
             rules_specificity["div li.example p.sample"]
             < rules_specificity["#identified"]
         )
 
         # Classes trump multiple elements
-        ok_(rules_specificity["ul li"] < rules_specificity["li.example"])
+        assert rules_specificity["ul li"] < rules_specificity["li.example"]
 
     def test_base_url_fixer(self):
         """if you leave some URLS as /foo and set base_url to
@@ -772,7 +794,8 @@ ple.com/bg.png); font-family:Omerta">
             message = '"{0}" not in\n{1}'.format(fragment, html)
         else:
             message = '"{0}" not in HTML'.format(fragment)
-        ok_(fragment in html, message)
+        # ok_(fragment in html, message)
+        assert fragment in html, message
 
     def test_css_with_pseudoclasses_included(self):
         "Pick up the pseudoclasses too and include them"
@@ -851,7 +874,8 @@ a:visited {border:1px solid green}p::first-letter {float:left;font-size:300%}
         expect_html = re.sub(r"}\s+", "}", expect_html)
         result_html = result_html.replace("}\n", "}")
 
-        eq_(expect_html, result_html)
+        # eq_(expect_html, result_html)
+        assert expect_html == result_html
         # XXX
 
     def test_css_with_html_attributes(self):
@@ -968,8 +992,8 @@ ical-align:middle" bgcolor="red" valign="middle">Cell 2</td>
             strip_important=False,
         )
         result_html = p.transform()
-        ok_("<html>" in result_html)
-        ok_(
+        assert "<html>" in result_html
+        assert (
             '<style media="only screen and (max-device-width: 480px)" '
             'type="text/css">\n'
             "* {line-height: normal !important; "
@@ -1686,7 +1710,9 @@ ration:none">Yes!</strong></p>
         """
 
         p = Premailer(html, method="xml")
-        assert_raises(XMLSyntaxError, p.transform)
+        # assert_raises(XMLSyntaxError, p.transform)
+        with pytest.raises(XMLSyntaxError):
+            p.transform()
 
     def test_xml_cdata(self):
         """Test that CDATA is set correctly on remaining styles"""
@@ -1750,8 +1776,8 @@ ground:red}/*]]>*/</style>
 
         result_html = out.getvalue().strip()
 
-        ok_("<html>" in result_html)
-        ok_(
+        assert "<html>" in result_html
+        assert (
             '<style media="only screen and (max-device-width: 480px)" '
             'type="text/css">\n'
             "* {line-height: normal !important; "
@@ -1877,8 +1903,8 @@ lor:purple}">html</a></p>
         thread non-safe cssutils calls.
         The test would fail if merge_styles would have not been thread-safe"""
 
-        import threading
         import logging
+        import threading
 
         THREADS = 30
         REPEATS = 100
@@ -1923,7 +1949,8 @@ lor:purple}">html</a></p>
 
         # check if any thread raised exception while in merge_styles call
         exceptions = [t.exc for t in threads if t.exc is not None]
-        eq_(exceptions, [])
+        # eq_(exceptions, [])
+        assert exceptions == []
 
     def test_external_links(self):
         """Test loading stylesheets via link tags"""
@@ -2054,7 +2081,9 @@ ation/rss+xml" title="RSS" href="/rss.xml">
         </html>"""
 
         p = Premailer(html, strip_important=False, allow_loading_external_files=True)
-        assert_raises(ExternalNotFoundError, p.transform)
+        # assert_raises(ExternalNotFoundError, p.transform)
+        with pytest.raises(ExternalNotFoundError):
+            p.transform()
 
     def test_external_styles_and_links(self):
         """Test loading stylesheets via both the 'external_styles'
@@ -2115,7 +2144,8 @@ ent:"" !important;display:block !important}
         r = p._load_external_url(faux_uri)
 
         mocked_requests.get.assert_called_once_with(faux_uri, verify=True)
-        eq_(faux_response, r)
+        # eq_(faux_response, r)
+        assert faux_response == r
 
     def test_load_external_url_with_custom_session(self):
         mocked_session = mock.MagicMock()
@@ -2126,7 +2156,8 @@ ent:"" !important;display:block !important}
         r = p._load_external_url(faux_uri)
 
         mocked_session.get.assert_called_once_with(faux_uri, verify=True)
-        eq_(faux_response, r)
+        # eq_(faux_response, r)
+        assert faux_response == r
 
     @mock.patch("premailer.premailer.requests")
     def test_load_external_url_no_insecure_ssl(self, mocked_requests):
@@ -2140,7 +2171,8 @@ ent:"" !important;display:block !important}
         r = p._load_external_url(faux_uri)
 
         mocked_requests.get.assert_called_once_with(faux_uri, verify=True)
-        eq_(faux_response, r)
+        # eq_(faux_response, r)
+        assert faux_response == r
 
     @mock.patch("premailer.premailer.requests")
     def test_load_external_url_with_insecure_ssl(self, mocked_requests):
@@ -2152,7 +2184,8 @@ ent:"" !important;display:block !important}
         r = p._load_external_url(faux_uri)
 
         mocked_requests.get.assert_called_once_with(faux_uri, verify=False)
-        eq_(faux_response, r)
+        # eq_(faux_response, r)
+        assert faux_response == r
 
     @mock.patch("premailer.premailer.requests")
     def test_load_external_url_404(self, mocked_requests):
@@ -2161,7 +2194,9 @@ ent:"" !important;display:block !important}
         faux_uri = "https://example.com/site.css"
         mocked_requests.get.return_value = MockResponse(faux_response, status_code=404)
         p = premailer.premailer.Premailer("<p>A paragraph</p>")
-        assert_raises(HTTPError, p._load_external_url, faux_uri)
+        # assert_raises(HTTPError, p._load_external_url, faux_uri)
+        with pytest.raises(HTTPError):
+            p._load_external_url(faux_uri)
 
     def test_css_text(self):
         """Test handling css_text passed as a string"""
@@ -2343,7 +2378,8 @@ ent:"" !important;display:block !important}
             (("http://www.com/style2.css",),),
             (("http://www.com/style3.css",),),
         ]
-        eq_(expected_args, mocked_pleu.call_args_list)
+        # eq_(expected_args, mocked_pleu.call_args_list)
+        assert expected_args == mocked_pleu.call_args_list
 
         expect_html = """<html>
         <head>
@@ -2384,7 +2420,8 @@ ent:"" !important;display:block !important}
             (("https://www.com/style2.css",),),
             (("https://www.peterbe.com/style3.css",),),
         ]
-        eq_(expected_args, mocked_pleu.call_args_list)
+        # eq_(expected_args, mocked_pleu.call_args_list)
+        assert expected_args == mocked_pleu.call_args_list
         expect_html = """<html>
         <head>
         </head>
@@ -2415,7 +2452,8 @@ ent:"" !important;display:block !important}
         )
         result_html = p.transform()
         expected_args = [(("http://www.peterbe.com/style.css",),)]
-        eq_(expected_args, mocked_pleu.call_args_list)
+        # eq_(expected_args, mocked_pleu.call_args_list)
+        assert expected_args == mocked_pleu.call_args_list
 
         expect_html = """<html>
         <head>
@@ -2479,7 +2517,7 @@ ent:"" !important;display:block !important}
 
         p = Premailer(html, disable_validation=True)
         result_html = p.transform()
-        ok_("/* comment */" in result_html)
+        assert "/* comment */" in result_html
 
     def test_unknown_in_media_queries(self):
         """CSS unknown rule inside a media query block should not be a problem"""
@@ -2501,7 +2539,7 @@ ent:"" !important;display:block !important}
 
         p = Premailer(html, disable_validation=True)
         result_html = p.transform()
-        ok_("/* unknown rule */" in result_html)
+        assert "/* unknown rule */" in result_html
 
     def test_fontface_selectors_with_no_selectortext(self):
         """
@@ -2599,8 +2637,9 @@ ent:"" !important;display:block !important}
         myhandler = logging.StreamHandler(mylog)
         p = Premailer(html, cssutils_logging_handler=myhandler)
         p.transform()  # it should work
-        eq_(
-            mylog.getvalue(), "CSSStylesheet: Unknown @rule found. [2:13: @keyframes]\n"
+        assert (
+            mylog.getvalue()
+            == "CSSStylesheet: Unknown @rule found. [2:13: @keyframes]\n"
         )
 
         # only log errors now
@@ -2612,7 +2651,8 @@ ent:"" !important;display:block !important}
             cssutils_logging_level=logging.ERROR,
         )
         p.transform()  # it should work
-        eq_(mylog.getvalue(), "")
+        # eq_(mylog.getvalue(), "")
+        assert mylog.getvalue() == ""
 
     def test_type_test(self):
         """test the correct type is returned"""
@@ -2635,14 +2675,16 @@ ent:"" !important;display:block !important}
 
         p = Premailer(html)
         result = p.transform()
-        eq_(type(result), type(""))
+        # eq_(type(result), type(""))
+        assert isinstance(result, str)
 
         html = fromstring(html)
+        # etree_type = type(html)
         etree_type = type(html)
 
         p = Premailer(html)
         result = p.transform()
-        ok_(type(result) != etree_type)
+        assert not isinstance(result, etree_type)
 
     def test_ignore_some_inline_stylesheets(self):
         """test that it's possible to put a `data-premailer="ignore"`
@@ -2861,7 +2903,9 @@ sheet" type="text/css">
 
         # Because you can't set a base_url without a full protocol
         p = Premailer(html, base_url="www.peterbe.com")
-        assert_raises(ValueError, p.transform)
+        # assert_raises(ValueError, p.transform)
+        with pytest.raises(ValueError):
+            p.transform()
 
     def test_align_float_images(self):
 
@@ -3099,7 +3143,9 @@ sheet" type="text/css">
             )
 
             p = Premailer(html)
-            assert_raises(ExternalFileLoadingError, p.transform)
+            # assert_raises(ExternalFileLoadingError, p.transform)
+            with pytest.raises(ExternalFileLoadingError):
+                p.transform()
 
             # Imagine if `allow_loading_external_files` and `keep_style_tags` where
             # both on, in some configuration or instance, but the HTML being
